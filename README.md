@@ -50,6 +50,12 @@ All three are independent and can be toggled while playing.
 | `InstantRecentre`   | `true`  | `F8`   | Drops the leftover drift after you release aim. |
 | `AlwaysShowReticle` | `false` | `F9`   | Keeps the reticle on screen instead of only while aiming. |
 
+Toggling one puts a message on screen so you don't have to go looking at the console. The
+plugin also says so when it loses the aim target and when it finds it again, since those are
+the times something looks broken and you'd want to know why. `[Notifications]` in the config
+turns them off or moves them: `Anchor` takes `TopLeft`, `TopCentre`, `TopRight`, `BottomLeft`,
+`BottomCentre` or `BottomRight`, and `Seconds` and `FontSize` do what they sound like.
+
 `InstantRecentre` handles the gap where the game has already snapped `+0x220` back to
 `(0, 0)` but the reticle is still coasting toward it. The weapon aims along that stale
 position for the ~0.3s it takes to arrive, so a shot fired right after releasing aim can land
@@ -121,7 +127,7 @@ should log the real offset within a few seconds of aiming and repair the config 
 ### The framerate question
 
 The detector fits and logs the easing rate, which makes it a usable instrument. Force
-detection with `TargetOffset = 0x999`, play, and note the `easing … per frame` value. Then do
+detection with `TargetOffset = 0x999`, play, and note the `easing ... per frame` value. Then do
 it again with your framerate capped a lot lower. If the rate doesn't move, it's a fixed per
 frame step and the easing really does get stronger the faster your machine runs. If the rate
 scales with frame time, it's `dt` based and framerate independent.
@@ -137,7 +143,7 @@ Config lands in `BepInEx/config/agent64.aimmods.cfg` on first run.
 You should see this on load:
 
 ```
-[Info : Agent 64 Aim Mods] Agent 64 Aim Mods 1.2.0 loaded. InstantAim ON (F7), InstantRecentre ON (F8), AlwaysShowReticle OFF (F9).
+[Info : Agent 64 Aim Mods] Agent 64 Aim Mods 1.3.0 loaded. InstantAim ON (F7), InstantRecentre ON (F8), AlwaysShowReticle OFF (F9).
 ```
 
 ## Building

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Runtime.InteropServices;
+using BepInEx.Configuration;
 using Il2CppInterop.Runtime;
 using UnityEngine;
 
@@ -40,11 +41,17 @@ namespace Agent64AimMods
         private void Update()
         {
             HandleHotkeys();
+            Plugin.Toasts.Prune();
 
             // Unity runs every Update before any LateUpdate, so writing here is what
             // Agent.LateUpdate reads when it poses the weapon. Without this the weapon
             // trails the mouse by one frame.
             Apply(afterGameEasing: false);
+        }
+
+        private void OnGUI()
+        {
+            Plugin.Toasts.Draw();
         }
 
         private void LateUpdate()
@@ -58,23 +65,27 @@ namespace Agent64AimMods
         {
             var options = Plugin.Options;
 
-            if (Input.GetKeyDown(options.ToggleAimKey.Value))
+            Toggle(options.ToggleAimKey, options.InstantAim, "Instant aim");
+            Toggle(options.ToggleRecentreKey, options.InstantRecentre, "Instant recentre");
+            Toggle(options.ToggleShowKey, options.AlwaysShowReticle, "Always show reticle");
+        }
+
+        private static void Toggle(ConfigEntry<KeyCode> key, ConfigEntry<bool> setting, string label)
+        {
+            if (!Input.GetKeyDown(key.Value))
             {
-                options.InstantAim.Value = !options.InstantAim.Value;
-                Plugin.Logger.LogInfo($"InstantAim {Settings.OnOff(options.InstantAim.Value)}");
+                return;
             }
 
-            if (Input.GetKeyDown(options.ToggleRecentreKey.Value))
-            {
-                options.InstantRecentre.Value = !options.InstantRecentre.Value;
-                Plugin.Logger.LogInfo($"InstantRecentre {Settings.OnOff(options.InstantRecentre.Value)}");
-            }
+            setting.Value = !setting.Value;
+            Announce($"{label}: {Settings.OnOff(setting.Value)}");
+        }
 
-            if (Input.GetKeyDown(options.ToggleShowKey.Value))
-            {
-                options.AlwaysShowReticle.Value = !options.AlwaysShowReticle.Value;
-                Plugin.Logger.LogInfo($"AlwaysShowReticle {Settings.OnOff(options.AlwaysShowReticle.Value)}");
-            }
+        /// <summary>Puts a line in the console and on screen at the same time.</summary>
+        private static void Announce(string message)
+        {
+            Plugin.Logger.LogInfo(message);
+            Plugin.Toasts.Show(message);
         }
 
         /// <param name="afterGameEasing">
@@ -205,6 +216,7 @@ namespace Agent64AimMods
             Plugin.Logger.LogInfo(
                 $"Detecting the aim target from {detector.CandidateCount} candidate fields. " +
                 "Aim and move the mouse for a few seconds; the mods are inactive until it resolves.");
+            Plugin.Toasts.Show("Finding the aim target, keep aiming...");
 
             return false;
         }
@@ -222,6 +234,8 @@ namespace Agent64AimMods
             // Persisted so the search happens once per game version rather than per launch.
             Plugin.Options.TargetOffset.Value = $"0x{offset:X}";
             targetField = BindTargetField(agent.Pointer);
+
+            Plugin.Toasts.Show($"Aim target found at 0x{offset:X}, mods active");
         }
 
         /// <summary>Finds the named behaviour on a transform's own GameObject.</summary>
@@ -323,6 +337,10 @@ namespace Agent64AimMods
 
             lastWarning = message;
             Plugin.Logger.LogWarning(message);
+
+            // A warning means the mods have stopped working, which is exactly the case
+            // nobody would think to check the console for.
+            Plugin.Toasts.Show(message);
         }
 
         private static string TypeNameOf(IntPtr field)

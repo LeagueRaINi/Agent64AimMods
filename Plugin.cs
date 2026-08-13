@@ -8,7 +8,7 @@ using UnityEngine;
 namespace Agent64AimMods
 {
     /// <summary>
-    /// Removes the frame-rate dependent easing Agent 64 applies to its aim reticle.
+    /// Makes the easing Agent 64 applies to its aim reticle optional.
     /// </summary>
     /// <remarks>
     /// While the aim button is held the camera is locked and the mouse drags a reticle
@@ -16,17 +16,17 @@ namespace Agent64AimMods
     /// that box as a Vector2 at <c>+0x220</c>, updated 1:1 with no smoothing, and reset to
     /// <c>(0, 0)</c> the moment aim is released.
     /// <para>
-    /// What lags is the visible reticle: a RectTransform that eases toward <c>+0x220</c> at
-    /// a hardcoded 0.1 per frame, leaving it roughly seven frames behind the mouse and
-    /// taking about 0.3s to settle. Being per-frame rather than per-second, it gets worse
-    /// the higher the framerate.
+    /// What lags is the visible reticle, a RectTransform that approaches <c>+0x220</c>
+    /// exponentially, leaving it roughly seven frames behind the mouse and taking about
+    /// 0.3s to settle. Those figures are fitted from a capture; the easing itself was never
+    /// found in the binary, so its exact form is unknown. See the README.
     /// </para>
     /// <para>
-    /// That reticle is not only cosmetic. <c>Agent.LateUpdate</c> walks <c>Agent+0x158</c>
-    /// (HUD) to <c>+0x30</c> (widget) to <c>+0x18</c> (RectTransform), reads its position
-    /// and builds the weapon's aim rotation from it, so the easing also drives where the
-    /// gun points. This plugin writes <c>+0x220</c> straight onto the RectTransform
-    /// instead, without patching the binary.
+    /// The reticle is not only cosmetic, and this part is confirmed in the code.
+    /// <c>Agent.LateUpdate</c> walks <c>Agent+0x158</c> (HUD) to <c>+0x30</c> (widget) to
+    /// <c>+0x18</c> (RectTransform), reads its position and builds the weapon's aim rotation
+    /// from it, so the lag also drives where the gun points. This plugin writes
+    /// <c>+0x220</c> straight onto the RectTransform instead, without patching the binary.
     /// </para>
     /// </remarks>
     [BepInPlugin(Guid, Name, Version)]
@@ -34,15 +34,17 @@ namespace Agent64AimMods
     {
         public const string Guid = "agent64.aimmods";
         public const string Name = "Agent 64 Aim Mods";
-        public const string Version = "1.2.0";
+        public const string Version = "1.3.0";
 
         internal static ManualLogSource Logger { get; private set; }
         internal static Settings Options { get; private set; }
+        internal static Notifications Toasts { get; private set; }
 
         public override void Load()
         {
             Logger = Log;
             Options = new Settings(Config);
+            Toasts = new Notifications();
 
             ClassInjector.RegisterTypeInIl2Cpp<ReticleController>();
 
@@ -62,6 +64,7 @@ namespace Agent64AimMods
     {
         private const string Mods = "Mods";
         private const string Keys = "Hotkeys";
+        private const string Display = "Notifications";
         private const string Advanced = "Advanced";
 
         internal Settings(ConfigFile config)
@@ -91,6 +94,19 @@ namespace Agent64AimMods
             ToggleShowKey = config.Bind(Keys, "ToggleAlwaysShowReticle", KeyCode.F9,
                 "Toggles AlwaysShowReticle in game.");
 
+            ShowNotifications = config.Bind(Display, "Enabled", true,
+                "Show a message on screen when a mod is toggled, instead of only in the " +
+                "console.");
+
+            NotificationSeconds = config.Bind(Display, "Seconds", 2.5f,
+                "How long a message stays up before it fades out.");
+
+            NotificationAnchor = config.Bind(Display, "Anchor", Agent64AimMods.NotificationAnchor.TopCentre,
+                "Which corner or edge messages stack against.");
+
+            NotificationFontSize = config.Bind(Display, "FontSize", 20,
+                "Text size, in pixels.");
+
             ReticlePath = config.Bind(Advanced, "ReticlePath", "$GUI/Canvas/Ingame/Target",
                 "Hierarchy path of the reticle RectTransform.");
 
@@ -117,6 +133,10 @@ namespace Agent64AimMods
         internal ConfigEntry<KeyCode> ToggleAimKey { get; }
         internal ConfigEntry<KeyCode> ToggleRecentreKey { get; }
         internal ConfigEntry<KeyCode> ToggleShowKey { get; }
+        internal ConfigEntry<bool> ShowNotifications { get; }
+        internal ConfigEntry<float> NotificationSeconds { get; }
+        internal ConfigEntry<NotificationAnchor> NotificationAnchor { get; }
+        internal ConfigEntry<int> NotificationFontSize { get; }
         internal ConfigEntry<string> ReticlePath { get; }
         internal ConfigEntry<string> AgentType { get; }
         internal ConfigEntry<string> TargetOffset { get; }
