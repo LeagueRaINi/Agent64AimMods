@@ -21,8 +21,9 @@ hardcoded `0.1` per frame. Measured over an 888-frame capture:
 | `SmoothDamp(smoothTime)`        | T = 0.055  | 12.1 px |
 
 That is roughly a 7-frame lag with a ~0.3s tail. Because the step is per frame rather than
-per second, **the higher your framerate the stronger it gets** — almost certainly not
-intended, since the game predates the framerates it now runs at.
+per second, **the higher your framerate the stronger it gets** — a `Lerp` with a constant
+`t` is the usual way this happens, and it means two players on different hardware do not get
+the same feel out of the same setting.
 
 It is also not only cosmetic. `Agent.LateUpdate` walks `Agent+0x158` (HUD) → `+0x30`
 (widget) → `+0x18` (RectTransform), reads that position, and builds the weapon's aim
