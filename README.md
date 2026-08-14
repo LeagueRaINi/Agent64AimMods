@@ -47,7 +47,7 @@ All three are independent and can be toggled while playing.
 | Setting             | Default | Hotkey | Effect |
 | ------------------- | ------- | ------ | ------ |
 | `InstantAim`        | `true`  | `F7`   | Reticle and weapon follow the mouse exactly while aiming. |
-| `InstantRecentre`   | `true`  | `F8`   | Drops the leftover drift after you release aim. |
+| `InstantRecentre`   | `true`  | `F8`   | Keeps your aim at screen centre instead of it swinging off when you turn. |
 | `AlwaysShowReticle` | `false` | `F9`   | Keeps the reticle on screen instead of only while aiming. |
 
 Toggling one puts a message on screen so you don't have to go looking at the console. The
@@ -56,12 +56,24 @@ the times something looks broken and you'd want to know why. `[Notifications]` i
 turns them off or moves them: `Anchor` takes `TopLeft`, `TopCentre`, `TopRight`, `BottomLeft`,
 `BottomCentre` or `BottomRight`, and `Seconds` and `FontSize` do what they sound like.
 
-`InstantRecentre` handles the gap where the game has already snapped `+0x220` back to
-`(0, 0)` but the reticle is still coasting toward it. The weapon aims along that stale
-position for the ~0.3s it takes to arrive, so a shot fired right after releasing aim can land
-up to 40px off centre. It doesn't touch idle weapon sway, which comes from somewhere else.
-While you're hip firing steadily the target sits at `(0, 0)` anyway, so there's nothing here
-to change.
+`InstantRecentre` covers every frame where the target reads as centred, which is all of hip
+firing plus the moment right after you let go of aim.
+
+Screen centre isn't your aim point while hip firing. Looking around swings the aim point off
+centre, crosshair and all, and it only creeps back if you stand still for a second. The
+weapon's rotation gets built from the same transform, so the gun visibly follows it around.
+Pinning the transform every frame means your aim just stays at screen centre however you
+move.
+
+Where the sway is applied I can't tell you. `+0x220` reads exactly `(0, 0)` the whole time
+you aren't aiming, so whatever displaces the reticle writes the transform further downstream,
+and I never found it, same as the easing. What is solid is that this plugin's `LateUpdate`
+write lands after it and overwrites it.
+
+The same toggle covers the gap after releasing aim, where the game has already snapped
+`+0x220` back to `(0, 0)` but the reticle is still coasting toward it. The weapon aims along
+that stale position for the ~0.3s it takes to arrive, so a shot fired right then can land up
+to 40px off centre.
 
 `AlwaysShowReticle` is off by default since it changes the HUD rather than the feel. All four
 of the widget's show/hide methods have the same body, resolving `GetComponent<Image>()` into
