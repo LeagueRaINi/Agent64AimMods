@@ -111,11 +111,15 @@ aiming:
 
 | Guard       | Requirement |
 | ----------- | ----------- |
-| Samples     | 120 frames minimum |
-| Signal      | 2000px of accumulated error, so a still screen proves nothing |
+| Samples     | 120 frames in which the reticle actually moved |
+| Signal      | 1500px of reticle travel |
 | Fit quality | winner explains 90% of the reticle's movement |
 | Margin      | winner beats the runner up by 0.15, so ties are rejected |
 | Rate        | implied easing between 0.01 and 0.95 per frame |
+
+Both of the first two count movement only, so standing around doesn't advance them. Still
+frames are kept in the fit though, since they cost the true target nothing while a constant
+field far from the reticle piles up error it can't account for.
 
 Detection only observes, it never writes, so the mods stay off until it resolves. A fruitless
 attempt restarts every 30 seconds or so. Since it's a fit rather than a baked in constant, it

@@ -25,6 +25,9 @@ namespace Agent64AimMods
         /// <summary>IL2CPP type the aim target field is required to have.</summary>
         private const string TargetTypeName = "UnityEngine.Vector2";
 
+        /// <summary>Instance fields start after the IL2CPP object header.</summary>
+        private const int ObjectHeaderBytes = 0x10;
+
         private Component agent;
         private RectTransform reticle;
         private Behaviour reticleImage;
@@ -179,6 +182,7 @@ namespace Agent64AimMods
             targetField = IntPtr.Zero;
             detector = null;
             bindFailed = false;
+            Plugin.Toasts.ClearStatus();
 
             return reticle != null && agent != null;
         }
@@ -216,7 +220,10 @@ namespace Agent64AimMods
             Plugin.Logger.LogInfo(
                 $"Detecting the aim target from {detector.CandidateCount} candidate fields. " +
                 "Aim and move the mouse for a few seconds; the mods are inactive until it resolves.");
-            Plugin.Toasts.Show("Finding the aim target, keep aiming...");
+
+            // Sticky rather than a message that fades, because this runs for as long as it
+            // takes the player to aim about.
+            Plugin.Toasts.SetStatus("Finding the aim target, keep aiming...");
 
             return false;
         }
@@ -235,6 +242,7 @@ namespace Agent64AimMods
             Plugin.Options.TargetOffset.Value = $"0x{offset:X}";
             targetField = BindTargetField(agent.Pointer);
 
+            Plugin.Toasts.ClearStatus();
             Plugin.Toasts.Show($"Aim target found at 0x{offset:X}, mods active");
         }
 
@@ -268,11 +276,18 @@ namespace Agent64AimMods
         private IntPtr BindTargetField(IntPtr instance)
         {
             string configured = Plugin.Options.TargetOffset.Value;
-
             int wanted = ParseOffset(configured);
-            if (wanted < 0)
+
+            // Blank, zero, or anything below the object header can't name a real field.
+            // Clearing the setting is a normal way to ask for detection, so only complain
+            // about a value that was actually meant to be an offset.
+            if (wanted < ObjectHeaderBytes)
             {
-                Warn($"TargetOffset '{configured}' is not a hex offset.");
+                if (wanted < 0 && !string.IsNullOrWhiteSpace(configured))
+                {
+                    Warn($"TargetOffset '{configured}' is not a hex offset.");
+                }
+
                 return IntPtr.Zero;
             }
 
@@ -325,6 +340,7 @@ namespace Agent64AimMods
             detector = null;
             targetField = IntPtr.Zero;
             bindFailed = false;
+            Plugin.Toasts.ClearStatus();
         }
 
         /// <summary>Logs a message once, so a persistent fault cannot spam the console every frame.</summary>
@@ -340,7 +356,7 @@ namespace Agent64AimMods
 
             // A warning means the mods have stopped working, which is exactly the case
             // nobody would think to check the console for.
-            Plugin.Toasts.Show(message);
+            Plugin.Toasts.Show(message, warning: true);
         }
 
         private static string TypeNameOf(IntPtr field)

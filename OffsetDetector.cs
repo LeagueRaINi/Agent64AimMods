@@ -21,11 +21,18 @@ namespace Agent64AimMods
     /// </remarks>
     internal sealed class OffsetDetector
     {
-        /// <summary>Frames to observe before a result is considered at all.</summary>
+        /// <summary>Frames of actual reticle movement before a result is considered at all.</summary>
         private const int MinimumSamples = 120;
 
-        /// <summary>Total error, in pixels, that must accumulate before trusting a fit.</summary>
-        private const double MinimumSignal = 2000.0;
+        /// <summary>
+        /// Distance the reticle has to have travelled, in pixels, before a fit is trusted.
+        /// Movement is the only thing carrying information here: a still reticle satisfies
+        /// <c>delta = k * error</c> for nothing in particular.
+        /// </summary>
+        private const double MinimumSignal = 1500.0;
+
+        /// <summary>Movement below this in a frame is treated as the reticle sitting still.</summary>
+        private const float MovementThreshold = 0.5f;
 
         /// <summary>Share of the reticle's movement the winner has to explain.</summary>
         private const double MinimumFitQuality = 0.9;
@@ -38,16 +45,20 @@ namespace Agent64AimMods
         private const double RequiredMargin = 0.15;
 
         /// <summary>Frames after which a fruitless attempt restarts, roughly 30 seconds.</summary>
-        private const int RetryAfterSamples = 5400;
+        private const int RetryAfterFrames = 5400;
 
         private const string TargetTypeName = "UnityEngine.Vector2";
         private const int FieldAttributeStatic = 0x10;
+
+        /// <summary>Instance fields start after the IL2CPP object header.</summary>
+        private const int ObjectHeaderBytes = 0x10;
 
         private readonly List<Candidate> candidates = new();
         private readonly IntPtr instance;
 
         private Vector2 previousPosition;
         private bool hasPrevious;
+        private int frames;
         private int samples;
         private double signal;
 
@@ -63,6 +74,7 @@ namespace Agent64AimMods
 
         /// <summary>Number of fields being considered.</summary>
         internal int CandidateCount => candidates.Count;
+
 
         /// <summary>
         /// Feeds one frame of evidence in. Call after the game has eased the reticle, and
@@ -84,19 +96,26 @@ namespace Agent64AimMods
 
             Vector2 delta = position - previousPosition;
 
+            // Still frames are kept in the fit. They cost the true target nothing, since
+            // both its error and the movement are zero, while a constant field far from the
+            // reticle piles up error it cannot explain. They just don't count as progress.
             foreach (Candidate candidate in candidates)
             {
                 Vector2 value = ReadVector2(instance, candidate.Field);
-                Vector2 error = value - previousPosition;
-
-                candidate.Accumulate(error, delta);
-                signal += Math.Abs(error.x) + Math.Abs(error.y);
+                candidate.Accumulate(value - previousPosition, delta);
             }
 
             previousPosition = position;
-            samples++;
+            frames++;
 
-            if (samples >= RetryAfterSamples)
+            float travelled = Mathf.Abs(delta.x) + Mathf.Abs(delta.y);
+            if (travelled >= MovementThreshold)
+            {
+                samples++;
+                signal += travelled;
+            }
+
+            if (frames >= RetryAfterFrames)
             {
                 Reset();
                 return false;
@@ -166,6 +185,7 @@ namespace Agent64AimMods
                 candidate.Reset();
             }
 
+            frames = 0;
             samples = 0;
             signal = 0.0;
             hasPrevious = false;
@@ -194,9 +214,15 @@ namespace Agent64AimMods
                         continue;
                     }
 
-                    if (Marshal.PtrToStringUTF8(IL2CPP.il2cpp_type_get_name(type)) == TargetTypeName)
+                    if (Marshal.PtrToStringUTF8(IL2CPP.il2cpp_type_get_name(type)) != TargetTypeName)
                     {
-                        yield return (field, (int)IL2CPP.il2cpp_field_get_offset(field));
+                        continue;
+                    }
+
+                    int offset = (int)IL2CPP.il2cpp_field_get_offset(field);
+                    if (offset >= ObjectHeaderBytes)
+                    {
+                        yield return (field, offset);
                     }
                 }
             }

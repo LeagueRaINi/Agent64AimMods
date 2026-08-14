@@ -15,13 +15,23 @@ namespace Agent64AimMods
     }
 
     /// <summary>
-    /// Short lived on screen messages, so toggling a mod doesn't mean alt tabbing to read
-    /// the console.
+    /// On screen messages, so mod state doesn't mean alt tabbing to read the console.
     /// </summary>
+    /// <remarks>
+    /// Two kinds. A status line stays up for as long as whatever set it is still happening,
+    /// which is what open ended work like offset detection needs. Everything else is a
+    /// message that fades out on its own.
+    /// </remarks>
     internal sealed class Notifications
     {
         /// <summary>How long a message spends fading out at the end of its life.</summary>
         private const float FadeSeconds = 0.6f;
+
+        /// <summary>Warnings outlive normal messages by this much, since they matter more.</summary>
+        private const float WarningMultiplier = 2.5f;
+
+        /// <summary>Floor on how long a warning stays up, in seconds.</summary>
+        private const float MinimumWarningSeconds = 6f;
 
         /// <summary>Gap between stacked messages, in pixels.</summary>
         private const float LineSpacing = 4f;
@@ -32,25 +42,43 @@ namespace Agent64AimMods
         /// <summary>Older messages are dropped once this many are queued.</summary>
         private const int MaxVisible = 4;
 
+        private static readonly Color InfoColour = new(1f, 1f, 1f, 1f);
+        private static readonly Color WarningColour = new(1f, 0.78f, 0.25f, 1f);
+
         private readonly List<Message> messages = new();
+        private string status;
         private GUIStyle style;
         private int styleFontSize;
 
-        /// <summary>Queues a message. Ignored when notifications are switched off.</summary>
-        internal void Show(string text)
+        /// <summary>Queues a message that fades out on its own.</summary>
+        internal void Show(string text, bool warning = false)
         {
-            if (!Plugin.Options.ShowNotifications.Value || string.IsNullOrEmpty(text))
+            if (!Enabled || string.IsNullOrEmpty(text))
             {
                 return;
             }
 
-            messages.Add(new Message(text, Time.unscaledTime + Plugin.Options.NotificationSeconds.Value));
+            float seconds = Plugin.Options.NotificationSeconds.Value;
+            if (warning)
+            {
+                seconds = Mathf.Max(seconds * WarningMultiplier, MinimumWarningSeconds);
+            }
+
+            messages.Add(new Message(text, Time.unscaledTime + seconds, warning));
 
             if (messages.Count > MaxVisible)
             {
                 messages.RemoveRange(0, messages.Count - MaxVisible);
             }
         }
+
+        /// <summary>
+        /// Sets the line that stays up until it is changed or cleared. Use for work that
+        /// runs for an unknown length of time.
+        /// </summary>
+        internal void SetStatus(string text) => status = Enabled ? text : null;
+
+        internal void ClearStatus() => status = null;
 
         /// <summary>Drops expired messages. Called once per frame, not once per GUI event.</summary>
         internal void Prune()
@@ -64,10 +92,10 @@ namespace Agent64AimMods
             }
         }
 
-        /// <summary>Draws the queue. Must be called from OnGUI.</summary>
+        /// <summary>Draws the status line and the queue. Must be called from OnGUI.</summary>
         internal void Draw()
         {
-            if (messages.Count == 0 || !Plugin.Options.ShowNotifications.Value)
+            if (!Enabled || (status == null && messages.Count == 0))
             {
                 return;
             }
@@ -81,32 +109,44 @@ namespace Agent64AimMods
                 or NotificationAnchor.TopRight;
 
             Color previous = GUI.color;
+            int line = 0;
 
-            for (int i = 0; i < messages.Count; i++)
+            if (status != null)
             {
-                Message message = messages[i];
+                DrawLine(status, InfoColour, 1f, line++, lineHeight, fromTop, current);
+            }
 
-                float remaining = message.Expiry - Time.unscaledTime;
-                float alpha = Mathf.Clamp01(remaining / FadeSeconds);
+            foreach (Message message in messages)
+            {
+                float alpha = Mathf.Clamp01((message.Expiry - Time.unscaledTime) / FadeSeconds);
+                Color colour = message.IsWarning ? WarningColour : InfoColour;
 
-                float offset = i * (lineHeight + LineSpacing);
-                float y = fromTop
-                    ? Margin + offset
-                    : Screen.height - Margin - lineHeight - offset;
-
-                var area = new Rect(Margin, y, Screen.width - (Margin * 2f), lineHeight);
-
-                // Drawn twice, offset by a pixel, so the text stays readable against a
-                // bright skybox as well as a dark corridor.
-                GUI.color = new Color(0f, 0f, 0f, alpha * 0.8f);
-                GUI.Label(new Rect(area.x + 2f, area.y + 2f, area.width, area.height), message.Text, current);
-
-                GUI.color = new Color(1f, 1f, 1f, alpha);
-                GUI.Label(area, message.Text, current);
+                DrawLine(message.Text, colour, alpha, line++, lineHeight, fromTop, current);
             }
 
             GUI.color = previous;
         }
+
+        private static void DrawLine(
+            string text, Color colour, float alpha, int index, float lineHeight, bool fromTop, GUIStyle style)
+        {
+            float offset = index * (lineHeight + LineSpacing);
+            float y = fromTop
+                ? Margin + offset
+                : Screen.height - Margin - lineHeight - offset;
+
+            var area = new Rect(Margin, y, Screen.width - (Margin * 2f), lineHeight);
+
+            // Drawn twice, offset by a pixel, so the text stays readable against a bright
+            // skybox as well as a dark corridor.
+            GUI.color = new Color(0f, 0f, 0f, alpha * 0.8f);
+            GUI.Label(new Rect(area.x + 2f, area.y + 2f, area.width, area.height), text, style);
+
+            GUI.color = new Color(colour.r, colour.g, colour.b, alpha);
+            GUI.Label(area, text, style);
+        }
+
+        private static bool Enabled => Plugin.Options.ShowNotifications.Value;
 
         /// <summary>
         /// Builds the label style, which can only happen inside OnGUI because it reads
@@ -144,15 +184,18 @@ namespace Agent64AimMods
 
         private readonly struct Message
         {
-            internal Message(string text, float expiry)
+            internal Message(string text, float expiry, bool isWarning)
             {
                 Text = text;
                 Expiry = expiry;
+                IsWarning = isWarning;
             }
 
             internal string Text { get; }
 
             internal float Expiry { get; }
+
+            internal bool IsWarning { get; }
         }
     }
 }
